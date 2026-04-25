@@ -1,0 +1,74 @@
+Project Name: LocaFi (DSV Gruppe Hackathon Submission)
+Objective: Build a generative, context-aware city-wallet that predicts user needs in real-time, connecting citizens to local merchants using AI and geolocation.
+
+Tech Stack:
+* Frontend: Angular (v18/v19), Standalone Components, Signals for State Management, Tailwind CSS for styling.
+* Backend: NestJS (REST API), TypeScript.
+* AI/Data Context: Tavily Search API (for real-time local event/merchant data).
+* Brand/Theming: DSV Gruppe / Sparkasse (Primary color: Sparkasse Red #FF0000).
+
+---
+1. Shared Data Models (TypeScript Interfaces)
+Create a shared folder or duplicate these interfaces across both front and back end:
+* `CityContext`: `{ locationName: string; weather: string; vibeScore: number; }`
+* `VibeOffer`: `{ id: string; title: string; merchantName: string; distanceMeters: number; originalPrice: number; dsvDiscountPrice: number; tag: 'Food' | 'Event' | 'Retail'; expiryMinutes: number; }`
+* `WalletState`: `{ balance: number; dsvRewardPoints: number; userId: string; }`
+
+---
+2. Backend Architecture (NestJS)
+Scaffold the backend with the following modules and services:
+
+Modules:
+* `VibeModule`: Handles the core logic of sensing the city context.
+* `WalletModule`: Mocks the DSV financial transactions and point accrual.
+
+Services:
+* `TavilyIntegrationService`: A service that takes lat/lng coordinates and sends a query to the Tavily API (e.g., "Find 3 local cafes or live events happening right now near coordinates [lat, lng] in Stuttgart").
+* `VibeEngineService`: Calls `TavilyIntegrationService`, parses the LLM search results, and maps them into an array of `VibeOffer` objects.
+* `DsvWalletService`: Manages a mock ledger. Functions: `getWalletBalance()`, `processOfferTransaction(offerId)`.
+
+Controllers:
+* `VibeController`: 
+    * `GET /api/context?lat={lat}&lng={lng}` -> Returns `CityContext` and an array of `VibeOffer`s.
+* `WalletController`:
+    * `GET /api/wallet` -> Returns `WalletState`.
+    * `POST /api/wallet/claim` -> Processes an offer and updates the balance.
+
+---
+3. Frontend Architecture (Angular)
+Build a mobile-first Progressive Web App (PWA) interface. Use Angular Signals exclusively for state management (No NgRx, no BehaviorSubjects unless interfacing with legacy APIs).
+
+Core Services (Provided in Root):
+* `LocationEngineService`: Mocks user GPS coordinates (Default to Stuttgart Stadtmitte: Lat 48.7758, Lng 9.1760).
+* `VibeStore`: The central Signal store holding `currentContext`, `activeOffers`, and `walletState`.
+* `ApiService`: Handles HTTP calls to the NestJS backend.
+
+UI Components (Standalone):
+* `AppComponent`: The outer shell with a sticky bottom navigation bar.
+* `VibeDashboardComponent`: The main view containing the following:
+    * `WalletHeaderComponent`: Displays current balance, Sparkasse logo/branding, and reward points.
+    * `CityContextCardComponent`: A dynamic banner showing the current location (e.g., "Stadtmitte is Buzzing") and weather/vibe.
+    * `OfferCarouselComponent`: A horizontal scrolling list of `VibeOfferCardComponent`s.
+* `VibeOfferCardComponent`: A premium-looking card using Tailwind. Must highlight the "DSV Savings" in red and include a one-click "Claim with City-Wallet" button.
+
+Styling Rules (Tailwind):
+* Make the UI feel like a modern neo-banking app (e.g., N26, Revolut) but hyper-localized.
+* Use subtle animations (e.g., pulsing dots) when the `VibeStore` is updating location context to show "Generative AI" at work.
+* Use Sparkasse Red (#FF0000) for primary call-to-action buttons.
+
+---
+4. Software Engineering & Architecture Principles
+To ensure a highly performant, enterprise-grade application, enforce the following principles strictly during code generation:
+
+* Separation of Concerns (SoC):
+    * Frontend: Components must be "dumb" whenever possible. They should only handle UI rendering and user events. All business logic, state management, and HTTP calls must be delegated to Angular Services (@Injectable). 
+    * Backend: NestJS Controllers must only handle routing and HTTP payload validation. Delegate all business logic, data formatting, and API orchestration to NestJS Services.
+* Dependency Inversion Principle (DIP):
+    * Heavily utilize the native Dependency Injection (DI) systems of both Angular and NestJS.
+    * Code against interfaces, not concrete implementations. Provide mock services for the frontend while the backend is being built.
+* DRY (Don't Repeat Yourself):
+    * Create a shared `interfaces.ts` or `models` directory to ensure the `CityContext` and `VibeOffer` models are identical across the NestJS backend and Angular frontend.
+    * Extract reusable UI elements (like the Sparkasse-branded buttons or badges) into standalone shared UI components.
+* Performance Optimization:
+    * Frontend Change Detection: Use Angular's `ChangeDetectionStrategy.OnPush` on all components. Rely entirely on Signals to trigger targeted UI updates rather than global change detection cycles.
+    * Backend Efficiency: Implement basic caching in NestJS for the Tavily API responses (e.g., if two users search the same Stuttgart coordinates within 5 minutes, return the cached vibe to save API credits and reduce latency).
