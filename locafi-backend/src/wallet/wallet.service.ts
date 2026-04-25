@@ -72,6 +72,25 @@ export class WalletService {
     return wallet.save();
   }
 
+  /** Demo / hackathon: add fixed EUR credit to the authenticated user's wallet. */
+  async topUpBalance(userId: string, creditEur = 50): Promise<WalletDocument> {
+    if (!Number.isFinite(creditEur) || creditEur <= 0) {
+      throw new BadRequestException('credit must be a positive finite number');
+    }
+    const credit = Math.round(creditEur * 100) / 100;
+    const wallet = await this.walletModel
+      .findOneAndUpdate(
+        { userId },
+        { $inc: { balance: credit } },
+        { new: true, runValidators: true },
+      )
+      .exec();
+    if (!wallet) {
+      throw new NotFoundException(`Wallet not found for userId: ${userId}`);
+    }
+    return wallet;
+  }
+
   /**
    * Atomically deducts {@link amount} from balance and adjusts reward points by {@link points}
    * (typically positive when awarding points). Runs in a Mongo transaction for integrity.

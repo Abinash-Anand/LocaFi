@@ -35,6 +35,12 @@ export class WalletController {
     return this.toDto(wallet);
   }
 
+  @Post('topup')
+  async topUp(@Req() req: { user: { sub: string } }): Promise<WalletResponseDto> {
+    const wallet = await this.walletService.topUpBalance(req.user.sub, 50);
+    return this.toDto(wallet);
+  }
+
   private toDto(wallet: { userId: string; balance: number; dsvRewardPoints: number }): WalletResponseDto {
     return {
       userId: wallet.userId,

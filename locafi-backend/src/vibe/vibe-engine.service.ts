@@ -31,10 +31,13 @@ export class VibeEngineService {
   ) {}
 
   async getContextWithOffers(lat: number, lng: number): Promise<ContextResponseDto> {
+    const osmNeighborhood = await this.getNeighborhoodFromCoords(lat, lng);
+    const locationForQuery = osmNeighborhood?.trim() || 'Stuttgart';
+
     try {
-      const tavilyResponse = await this.tavily.searchNearCoordinates(lat, lng);
+      const tavilyResponse = await this.tavily.searchNearCoordinates(lat, lng, locationForQuery);
       const offers = this.mapTavilyResultsToOffers(tavilyResponse.results ?? []);
-      const context = await this.buildCityContext(lat, lng, tavilyResponse, offers.length);
+      const context = await this.buildCityContext(lat, lng, tavilyResponse, offers.length, osmNeighborhood);
       return { context, offers };
     } catch (err: unknown) {
       const error = err as { response?: { data?: unknown }; message?: string };
@@ -72,8 +75,9 @@ export class VibeEngineService {
     lng: number,
     tavily: TavilySearchResponse,
     offerCount: number,
+    preFetchedOsm: string | null,
   ): Promise<CityContext> {
-    const locationName = await this.resolveLocationName(lat, lng, tavily);
+    const locationName = await this.resolveLocationName(lat, lng, tavily, preFetchedOsm);
     const weather =
       (await this.fetchOpenMeteoWeatherFormatted(lat, lng)) ?? 'Weather data temporarily unavailable';
     const baseScore = Math.min(95, 55 + offerCount * 8 + (tavily.answer?.length ? 5 : 0));
@@ -176,7 +180,12 @@ export class VibeEngineService {
     lat: number,
     lng: number,
     tavily: TavilySearchResponse,
+    preFetchedOsm: string | null,
   ): Promise<string> {
+    if (preFetchedOsm?.trim()) {
+      return preFetchedOsm.trim();
+    }
+
     const fromOsm = await this.getNeighborhoodFromCoords(lat, lng);
     if (fromOsm) {
       return fromOsm;
@@ -266,7 +275,8 @@ export class VibeEngineService {
     const text = `${item.title} ${item.content}`.toLowerCase();
     const tag = this.inferTag(text);
     const merchantName = this.extractMerchantName(item);
-    const { originalPrice, dsvDiscountPrice, pricingIsEstimated } = this.extractPrices(item.content);
+    const snippet = `${item.title ?? ''} ${item.content ?? ''}`;
+    const { originalPrice, dsvDiscountPrice, pricingIsEstimated } = this.extractPrices(snippet);
 
     return {
       id: this.stableOfferId(item.url, index),
@@ -311,24 +321,48 @@ export class VibeEngineService {
   }
 
   /**
-   * Parses EUR amounts from snippet text (€ / EUR). If none found, uses a fixed market-average placeholder
-   * and flags {@link VibeOffer.pricingIsEstimated}.
+   * Parses EUR amounts from title + snippet (€ / EUR / European formats and common "from/ab" price phrases).
+   * If none found, uses a fixed market-average placeholder and flags {@link VibeOffer.pricingIsEstimated}.
    */
-  private extractPrices(content: string): {
+  private extractPrices(snippet: string): {
     originalPrice: number;
     dsvDiscountPrice: number;
     pricingIsEstimated: boolean;
   } {
-    const eurMatches = [
-      ...content.matchAll(/(?:€|EUR)\s*([\d]+(?:[.,]\d{1,2})?)|([\d]+(?:[.,]\d{1,2})?)\s*(?:€|EUR)\b/gi),
-    ];
-    const amounts = eurMatches
-      .map((m) => parseFloat((m[1] ?? m[2] ?? '0').replace(',', '.')))
-      .filter((n) => !Number.isNaN(n) && n > 0);
+    const text = snippet ?? '';
+    const collected: number[] = [];
+
+    const pushParsed = (raw: string | undefined) => {
+      if (!raw) {
+        return;
+      }
+      const n = parseFloat(raw.replace(',', '.'));
+      if (!Number.isNaN(n) && n > 0 && n < 50_000) {
+        collected.push(n);
+      }
+    };
+
+    for (const m of text.matchAll(/(?:€|EUR)\s*:?\s*([\d]+(?:[.,]\d{1,2})?)/gi)) {
+      pushParsed(m[1]);
+    }
+    for (const m of text.matchAll(/([\d]+(?:[.,]\d{1,2})?)\s*(?:€|EUR)\b/gi)) {
+      pushParsed(m[1]);
+    }
+    for (const m of text.matchAll(
+      /\b(?:from|ab|nur|only|starting|ab\s*)\s*:?\s*([\d]+(?:[.,]\d{1,2})?)\s*(?:€|EUR|eur)?\b/gi,
+    )) {
+      pushParsed(m[1]);
+    }
+    for (const m of text.matchAll(/\b(?:€|EUR)\s*[:\-]?\s*([\d]+(?:[.,]\d{1,2})?)\s*[-–]\s*([\d]+(?:[.,]\d{1,2})?)\s*(?:€|EUR)?/gi)) {
+      pushParsed(m[1]);
+      pushParsed(m[2]);
+    }
+
+    const amounts = collected.length > 0 ? collected : this.extractPricesLegacyEuroRegex(text);
 
     if (amounts.length >= 2) {
-      const high = Math.max(amounts[0], amounts[1]);
-      const low = Math.min(amounts[0], amounts[1]);
+      const high = Math.max(...amounts);
+      const low = Math.min(...amounts);
       return {
         originalPrice: roundMoney(high),
         dsvDiscountPrice: roundMoney(low),
@@ -350,6 +384,15 @@ export class VibeEngineService {
       dsvDiscountPrice: roundMoney(marketAverageEur * 0.8),
       pricingIsEstimated: true,
     };
+  }
+
+  private extractPricesLegacyEuroRegex(content: string): number[] {
+    const eurMatches = [
+      ...content.matchAll(/(?:€|EUR)\s*([\d]+(?:[.,]\d{1,2})?)|([\d]+(?:[.,]\d{1,2})?)\s*(?:€|EUR)\b/gi),
+    ];
+    return eurMatches
+      .map((m) => parseFloat((m[1] ?? m[2] ?? '0').replace(',', '.')))
+      .filter((n) => !Number.isNaN(n) && n > 0 && n < 50_000);
   }
 }
 

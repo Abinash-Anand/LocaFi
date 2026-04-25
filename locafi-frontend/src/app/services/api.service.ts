@@ -36,4 +36,8 @@ export class ApiService {
   claimWallet(payload: ClaimWalletRequest): Observable<WalletState> {
     return this.http.post<WalletState>(`${API_BASE_URL}/api/wallet/claim`, payload);
   }
+
+  topUpWallet(): Observable<WalletState> {
+    return this.http.post<WalletState>(`${API_BASE_URL}/api/wallet/topup`, {});
+  }
 }

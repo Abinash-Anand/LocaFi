@@ -1,5 +1,6 @@
-import { ChangeDetectionStrategy, Component, Input, Signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input, Signal, inject, signal } from '@angular/core';
 import { WalletState } from '../../../models/interfaces';
+import { VibeStore } from '../../../services/vibe-store.service';
 
 @Component({
   selector: 'app-wallet-header',
@@ -29,20 +30,54 @@ import { WalletState } from '../../../models/interfaces';
           </div>
         </div>
         @if (wallet.balance === 0) {
-          <p
-            class="mt-4 rounded-xl border border-sparkasse/30 bg-sparkasse/10 px-3 py-2.5 text-center text-xs font-medium leading-snug text-slate-100"
-            role="status"
+          <div
+            class="mt-4 space-y-2 rounded-xl border border-sparkasse/30 bg-sparkasse/10 px-3 py-3 text-center"
+            role="region"
+            aria-label="Wallet top-up"
           >
-            Top up your wallet to start claiming deals!
-          </p>
+            <p class="text-xs font-medium leading-snug text-slate-100">
+              Top up your wallet to start claiming deals!
+            </p>
+            <button
+              type="button"
+              (click)="onTopUp()"
+              [disabled]="topUpSubmitting()"
+              class="w-full rounded-lg bg-sparkasse px-3 py-2.5 text-xs font-semibold text-white transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              @if (topUpSubmitting()) {
+                Adding funds…
+              } @else {
+                Add €50.00
+              }
+            </button>
+            @if (topUpError()) {
+              <p class="text-xs text-rose-300">{{ topUpError() }}</p>
+            }
+          </div>
         }
       } @else {
         <div class="h-16 animate-pulse rounded-xl bg-slate-800"></div>
       }
     </section>
   `,
-  changeDetection: ChangeDetectionStrategy.OnPush
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class WalletHeaderComponent {
+  private readonly vibeStore = inject(VibeStore);
+
   @Input({ required: true }) walletSignal!: Signal<WalletState | null>;
+  readonly topUpSubmitting = signal(false);
+  readonly topUpError = signal<string | null>(null);
+
+  async onTopUp(): Promise<void> {
+    this.topUpError.set(null);
+    this.topUpSubmitting.set(true);
+    try {
+      await this.vibeStore.topUpWallet();
+    } catch {
+      this.topUpError.set('Could not top up. Check your connection and try again.');
+    } finally {
+      this.topUpSubmitting.set(false);
+    }
+  }
 }

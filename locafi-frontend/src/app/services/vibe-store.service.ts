@@ -68,6 +68,11 @@ export class VibeStore {
       });
   }
 
+  async topUpWallet(): Promise<void> {
+    const updated = await firstValueFrom(this.api.topUpWallet());
+    this._walletState.set(updated);
+  }
+
   async claimOffer(offer: VibeOffer): Promise<void> {
     const wallet = this._walletState();
     if (!wallet) {
