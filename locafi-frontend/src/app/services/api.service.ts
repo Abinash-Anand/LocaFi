@@ -25,7 +25,6 @@ export class ApiService {
   private readonly http = inject(HttpClient);
 
   getContext(lat: number, lng: number): Observable<ContextApiResponse> {
-    console.log('[ApiService] GET /api/context', { lat, lng });
     const params = new HttpParams().set('lat', String(lat)).set('lng', String(lng));
     return this.http.get<ContextApiResponse>(`${API_BASE_URL}/api/context`, { params });
   }

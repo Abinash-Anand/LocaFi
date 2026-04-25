@@ -1,5 +1,5 @@
 import { HttpService } from '@nestjs/axios';
-import { BadGatewayException, Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
 import { createHash } from 'crypto';
 import { firstValueFrom } from 'rxjs';
@@ -23,6 +23,8 @@ export interface ContextResponseDto {
 
 @Injectable()
 export class VibeEngineService {
+  private readonly logger = new Logger(VibeEngineService.name);
+
   constructor(
     private readonly tavily: TavilyIntegrationService,
     private readonly http: HttpService,
@@ -35,24 +37,31 @@ export class VibeEngineService {
       const context = await this.buildCityContext(lat, lng, tavilyResponse, offers.length);
       return { context, offers };
     } catch (err: unknown) {
-      if (axios.isAxiosError(err)) {
-        const status = err.response?.status;
-        if (status === 401 || status === 403) {
-          return {
-            context: await this.buildFallbackContext(lat, lng),
-            offers: [],
-          };
-        }
-      }
-      throw new BadGatewayException('Tavily search failed');
+      const error = err as { response?: { data?: unknown }; message?: string };
+      console.error('[Tavily Debug]', error.response?.data ?? error.message ?? String(err));
+      this.logger.warn(`Tavily search failed, returning empty offers: ${this.formatTavilyError(err)}`);
+      const context = await this.buildFallbackContext(lat, lng);
+      return { context, offers: [] };
     }
+  }
+
+  private formatTavilyError(err: unknown): string {
+    if (axios.isAxiosError(err)) {
+      return `${err.message} status=${err.response?.status ?? 'n/a'}`;
+    }
+    if (err instanceof Error) {
+      return err.message;
+    }
+    return String(err);
   }
 
   private async buildFallbackContext(lat: number, lng: number): Promise<CityContext> {
     const weather =
       (await this.fetchOpenMeteoWeatherFormatted(lat, lng)) ?? 'Weather data temporarily unavailable';
+    const fromOsm = await this.getNeighborhoodFromCoords(lat, lng);
+    const locationName = fromOsm ?? this.fallbackLocationLabel(lat, lng);
     return {
-      locationName: this.fallbackLocationLabel(lat, lng),
+      locationName,
       weather,
       vibeScore: 50,
     };
@@ -120,7 +129,7 @@ export class VibeEngineService {
             format: 'json',
             lat,
             lon: lng,
-            zoom: 14,
+            zoom: 16,
           },
           headers: {
             'User-Agent': NOMINATIM_USER_AGENT,
@@ -132,15 +141,29 @@ export class VibeEngineService {
 
       const data = await firstValueFrom(data$);
       const addr = data.address;
-      if (!addr) {
-        return null;
+      if (addr) {
+        /** Prefer fine-grained place names (suburb / neighbourhood / town) before whole city. */
+        const candidates = [
+          addr.neighbourhood,
+          addr.suburb,
+          addr.quarter,
+          addr.city_district,
+          addr.hamlet,
+          addr.village,
+          addr.town,
+          addr.municipality,
+          addr.city,
+          addr.county,
+        ];
+        for (const c of candidates) {
+          if (typeof c === 'string' && c.trim().length > 0) {
+            return c.trim();
+          }
+        }
       }
 
-      const candidates = [addr.suburb, addr.neighbourhood, addr.village, addr.city];
-      for (const c of candidates) {
-        if (typeof c === 'string' && c.trim().length > 0) {
-          return c.trim();
-        }
+      if (typeof data.name === 'string' && data.name.trim().length > 0) {
+        return data.name.trim();
       }
 
       return null;

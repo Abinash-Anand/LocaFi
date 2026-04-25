@@ -23,7 +23,7 @@ export class AuthService {
 
   async register(payload: { name: string; email: string; password: string }): Promise<void> {
     const res = await firstValueFrom(
-      this.http.post<AuthResponse>(`${API_BASE_URL}/api/auth/register`, payload),
+      this.http.post<AuthResponse>(`${API_BASE_URL}/api/auth/signup`, payload),
     );
     this.setToken(res.accessToken);
   }
@@ -35,9 +35,22 @@ export class AuthService {
     this.setToken(res.accessToken);
   }
 
-  logout(): void {
+  /**
+   * Optional server acknowledgement (stateless JWT), then clears the token and returns to `/`.
+   */
+  async logout(): Promise<void> {
+    const token = this.getToken();
+    if (token) {
+      try {
+        await firstValueFrom(
+          this.http.post<{ ok: boolean }>(`${API_BASE_URL}/api/auth/logout`, {}),
+        );
+      } catch {
+        // Still clear the client session if the network call fails.
+      }
+    }
     localStorage.removeItem(TOKEN_KEY);
-    this.router.navigateByUrl('/login');
+    await this.router.navigateByUrl('/');
   }
 
   getToken(): string | null {

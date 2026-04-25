@@ -48,4 +48,12 @@ export class LocationEngineService {
   getPositionOrStuttgartFallback(options?: PositionOptions): Promise<GeoCoords> {
     return this.getCurrentPosition(options).catch(() => STUTTGART_STADTMITTE);
   }
+
+  /**
+   * Use only from the authenticated `/dashboard` flow. This is the only path that should call
+   * `navigator.geolocation`, so the browser permission prompt never appears before login.
+   */
+  getCoordsForLoggedInDashboard(options?: PositionOptions): Promise<GeoCoords> {
+    return this.getPositionOrStuttgartFallback(options);
+  }
 }

@@ -28,6 +28,14 @@ import { WalletState } from '../../../models/interfaces';
             <p class="text-sm font-semibold text-slate-100">{{ wallet.dsvRewardPoints }}</p>
           </div>
         </div>
+        @if (wallet.balance === 0) {
+          <p
+            class="mt-4 rounded-xl border border-sparkasse/30 bg-sparkasse/10 px-3 py-2.5 text-center text-xs font-medium leading-snug text-slate-100"
+            role="status"
+          >
+            Top up your wallet to start claiming deals!
+          </p>
+        }
       } @else {
         <div class="h-16 animate-pulse rounded-xl bg-slate-800"></div>
       }

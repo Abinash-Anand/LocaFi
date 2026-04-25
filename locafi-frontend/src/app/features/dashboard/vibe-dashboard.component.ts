@@ -1,5 +1,6 @@
-import { ChangeDetectionStrategy, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
 import { VibeOffer } from '../../models/interfaces';
+import { AuthService } from '../../services/auth.service';
 import { VibeStore } from '../../services/vibe-store.service';
 import { CityContextCardComponent } from './components/city-context-card.component';
 import { OfferCarouselComponent } from './components/offer-carousel/offer-carousel.component';
@@ -12,9 +13,23 @@ import { WalletHeaderComponent } from './components/wallet-header.component';
   template: `
     <main class="min-h-screen bg-transparent text-slate-100">
       <div class="mx-auto flex w-full max-w-md flex-col gap-5 px-4 pb-10 pt-6">
-        <header class="mb-1">
-          <p class="text-xs uppercase tracking-[0.22em] text-slate-400">LocaFi</p>
-          <h1 class="text-2xl font-semibold tracking-tight text-white">Your city wallet</h1>
+        <header class="mb-1 flex items-start justify-between gap-3">
+          <div>
+            <p class="text-xs uppercase tracking-[0.22em] text-slate-400">LocaFi</p>
+            <h1 class="text-2xl font-semibold tracking-tight text-white">Your city wallet</h1>
+          </div>
+          <button
+            type="button"
+            (click)="onLogout()"
+            [disabled]="loggingOut()"
+            class="shrink-0 rounded-xl border border-slate-600/90 bg-slate-900/80 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-sparkasse/60 hover:text-white disabled:opacity-50"
+          >
+            @if (loggingOut()) {
+              Signing out…
+            } @else {
+              Logout
+            }
+          </button>
         </header>
 
         @if (store.isLoading()) {
@@ -66,10 +81,22 @@ import { WalletHeaderComponent } from './components/wallet-header.component';
 })
 export class VibeDashboardComponent implements OnInit {
   readonly store = inject(VibeStore);
+  private readonly auth = inject(AuthService);
+  readonly loggingOut = signal(false);
 
   ngOnInit(): void {
     if (!this.store.currentContext() && !this.store.isLoading()) {
       void this.store.bootstrapFromApi();
+    }
+  }
+
+  async onLogout(): Promise<void> {
+    this.loggingOut.set(true);
+    try {
+      this.store.clear();
+      await this.auth.logout();
+    } finally {
+      this.loggingOut.set(false);
     }
   }
 

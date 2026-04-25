@@ -38,7 +38,7 @@ export class WalletService {
             name: profile.name,
             email: profile.email.toLowerCase(),
             password: profile.passwordHash,
-            balance: 246.5,
+            balance: 0,
             dsvRewardPoints: 0,
           },
         },
@@ -66,7 +66,7 @@ export class WalletService {
       name: input.name,
       email: input.email.toLowerCase(),
       password: input.passwordHash,
-      balance: 246.5,
+      balance: 0,
       dsvRewardPoints: 0,
     });
     return wallet.save();

@@ -29,25 +29,23 @@ export class VibeStore {
   readonly hasOffers = computed(() => this._activeOffers().length > 0);
 
   /**
-   * Resolves GPS (or Stuttgart fallback), then loads city context and offers from the Nest API.
-   * Intended for `provideAppInitializer` so the app starts with live data.
+   * Resolves GPS (or Stuttgart fallback) via {@link LocationEngineService.getCoordsForLoggedInDashboard},
+   * then loads city context, offers, and wallet from the Nest API (JWT identifies the MongoDB user).
+   * Call only from the dashboard after the user is authenticated.
    */
   bootstrapFromApi(): Promise<void> {
     const user = this.auth.getCurrentUser();
-    const fallbackUserId = user?.id ?? user?.name ?? 'unknown-user';
+    const fallbackUserId = user?.id ?? 'unknown-user';
 
     this._awaitingGps.set(true);
     this.setLoading(true);
 
     return this.locationEngine
-      .getPositionOrStuttgartFallback()
+      .getCoordsForLoggedInDashboard()
       .then(async (coords) => {
         this._awaitingGps.set(false);
-        const [contextRes, walletRes] = await Promise.all([
-          firstValueFrom(this.api.getContext(coords.lat, coords.lng)),
-          firstValueFrom(this.api.getWallet()),
-        ]);
-        this.setVibeData(contextRes.context, contextRes.offers, walletRes);
+        const contextRes = await firstValueFrom(this.api.getContext(coords.lat, coords.lng));
+        this.setVibeData(contextRes.context, contextRes.offers, contextRes.wallet);
       })
       .catch(() => {
         this._activeOffers.set([]);
